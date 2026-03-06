@@ -6,6 +6,7 @@ const state = {
     topic: 'daily',
     level: 'beginner',
     autoSpeak: true,
+    practiceMode: 'dialog',
     currentDialog: [],
     currentStep: 0,
     isLoading: false
@@ -15,7 +16,9 @@ const state = {
 const elements = {
     setupScreen: document.getElementById('setup-screen'),
     dialogScreen: document.getElementById('dialog-screen'),
+    chatScreen: document.getElementById('chat-screen'),
     loading: document.getElementById('loading'),
+    practiceModeSelect: document.getElementById('practice-mode'),
     apiProviderSelect: document.getElementById('api-provider'),
     apiKeyInput: document.getElementById('api-key'),
     apiLink: document.getElementById('api-link'),
@@ -33,7 +36,11 @@ const elements = {
     totalStepsSpan: document.getElementById('total-steps'),
     backBtn: document.getElementById('back-btn'),
     newDialogBtn: document.getElementById('new-dialog-btn'),
-    configBtn: document.getElementById('config-btn')
+    configBtn: document.getElementById('config-btn'),
+    modeDescription: document.getElementById('mode-description'),
+    personaGroup: document.getElementById('persona-group'),
+    autospeakGroup: document.getElementById('autospeak-group'),
+    headerSubtitle: document.getElementById('header-subtitle')
 };
 
 // Tópicos para geração de diálogos
@@ -58,6 +65,8 @@ const levelDescriptions = {
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     setupEventListeners();
+    setupChatEventListeners();
+    updateModeUI();
 });
 
 function loadSettings() {
@@ -86,6 +95,17 @@ function loadSettings() {
     if (savedAutoSpeak !== null) {
         elements.autoSpeakCheck.checked = savedAutoSpeak === 'true';
     }
+
+    const savedMode = localStorage.getItem('practice_mode');
+    if (savedMode) {
+        elements.practiceModeSelect.value = savedMode;
+    }
+
+    const savedPersona = localStorage.getItem('ai_persona');
+    if (savedPersona) {
+        const personaSelect = document.getElementById('ai-persona');
+        if (personaSelect) personaSelect.value = savedPersona;
+    }
 }
 
 function updateApiLink() {
@@ -105,6 +125,23 @@ function saveSettings() {
     localStorage.setItem('dialog_topic', state.topic);
     localStorage.setItem('dialog_level', state.level);
     localStorage.setItem('auto_speak', state.autoSpeak);
+    localStorage.setItem('practice_mode', state.practiceMode);
+    localStorage.setItem('ai_persona', document.getElementById('ai-persona')?.value || 'friendly');
+}
+
+function updateModeUI() {
+    const mode = elements.practiceModeSelect.value;
+    const isChat = mode === 'freeChat';
+    
+    if (elements.modeDescription) {
+        elements.modeDescription.textContent = isChat 
+            ? 'Converse livremente com a IA usando sua voz em tempo real'
+            : 'Di\u00e1logos pr\u00e9-gerados para ler em voz alta';
+    }
+    
+    if (elements.personaGroup) {
+        elements.personaGroup.style.display = isChat ? 'block' : 'none';
+    }
 }
 
 function setupEventListeners() {
@@ -113,8 +150,11 @@ function setupEventListeners() {
     
     // Mudança de provedor
     elements.apiProviderSelect.addEventListener('change', updateApiLink);
+
+    // Mudança de modo
+    elements.practiceModeSelect.addEventListener('change', updateModeUI);
     
-    // Tecla ESPAÇO para avançar
+    // Tecla ESPAÇO para avançar (apenas no modo diálogo)
     document.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && elements.dialogScreen.classList.contains('active')) {
             e.preventDefault();
@@ -136,11 +176,17 @@ function showLoading(show) {
 function showScreen(screen) {
     elements.setupScreen.classList.remove('active');
     elements.dialogScreen.classList.remove('active');
+    elements.chatScreen.classList.remove('active');
     
     if (screen === 'setup') {
         elements.setupScreen.classList.add('active');
+        if (elements.headerSubtitle) elements.headerSubtitle.textContent = 'Pratique ingl\u00eas com IA';
     } else if (screen === 'dialog') {
         elements.dialogScreen.classList.add('active');
+        if (elements.headerSubtitle) elements.headerSubtitle.textContent = 'Pressione ESPA\u00c7O para avan\u00e7ar no di\u00e1logo';
+    } else if (screen === 'chat') {
+        elements.chatScreen.classList.add('active');
+        if (elements.headerSubtitle) elements.headerSubtitle.textContent = 'Converse em tempo real com a IA';
     }
 }
 
@@ -154,6 +200,7 @@ async function startPractice() {
     state.topic = elements.topicSelect.value;
     state.level = elements.levelSelect.value;
     state.autoSpeak = elements.autoSpeakCheck.checked;
+    state.practiceMode = elements.practiceModeSelect.value;
     
     if (!state.apiKey) {
         alert('Por favor, insira sua API Key');
@@ -161,7 +208,13 @@ async function startPractice() {
     }
     
     saveSettings();
-    await generateNewDialog();
+
+    if (state.practiceMode === 'freeChat') {
+        showScreen('chat');
+        await startFreeChat();
+    } else {
+        await generateNewDialog();
+    }
 }
 
 async function generateNewDialog() {
